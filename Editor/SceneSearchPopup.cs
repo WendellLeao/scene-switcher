@@ -113,9 +113,13 @@ namespace WendellLeao.SceneSwitcher.Editor
                 List<SceneEntry> starredEntries = shownEntries.Where(entry => SceneStarred.IsStarred(entry.Guid)).ToList();
                 List<SceneEntry> otherEntries = shownEntries.Where(entry => !SceneStarred.IsStarred(entry.Guid)).ToList();
 
-                bool showStarredHeader = starredEntries.Count > 0 || hiddenEntries.Count > 0;
+                bool showStarredSection = starredEntries.Count > 0;
+                bool showAllSection = otherEntries.Count > 0;
+                bool showHiddenSection = _showHidden && hiddenEntries.Count > 0;
+                bool toggleRendered = false;
+                bool sectionRendered = false;
 
-                if (showStarredHeader)
+                if (showStarredSection)
                 {
                     using (new EditorGUILayout.HorizontalScope())
                     {
@@ -124,29 +128,74 @@ namespace WendellLeao.SceneSwitcher.Editor
                         DrawShowHiddenToggle(hiddenEntries.Count);
                     }
 
+                    toggleRendered = true;
+
                     foreach (SceneEntry entry in starredEntries)
                     {
                         DrawSceneRow(entry, SceneSection.Starred);
                     }
 
-                    GUILayout.Space(SectionSpacing);
+                    sectionRendered = true;
                 }
 
-                GUILayout.Label("All Scenes", EditorStyles.miniBoldLabel);
-
-                foreach (SceneEntry entry in otherEntries)
+                if (showAllSection)
                 {
-                    DrawSceneRow(entry, SceneSection.All);
+                    if (sectionRendered)
+                    {
+                        GUILayout.Space(SectionSpacing);
+                    }
+
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        GUILayout.Label("All Scenes", EditorStyles.miniBoldLabel);
+
+                        if (!toggleRendered)
+                        {
+                            GUILayout.FlexibleSpace();
+                            DrawShowHiddenToggle(hiddenEntries.Count);
+                            toggleRendered = true;
+                        }
+                    }
+
+                    foreach (SceneEntry entry in otherEntries)
+                    {
+                        DrawSceneRow(entry, SceneSection.All);
+                    }
+
+                    sectionRendered = true;
                 }
 
-                if (_showHidden && hiddenEntries.Count > 0)
+                if (showHiddenSection)
                 {
-                    GUILayout.Space(SectionSpacing);
-                    GUILayout.Label("Hidden", EditorStyles.miniBoldLabel);
+                    if (sectionRendered)
+                    {
+                        GUILayout.Space(SectionSpacing);
+                    }
+
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        GUILayout.Label("Hidden", EditorStyles.miniBoldLabel);
+
+                        if (!toggleRendered)
+                        {
+                            GUILayout.FlexibleSpace();
+                            DrawShowHiddenToggle(hiddenEntries.Count);
+                            toggleRendered = true;
+                        }
+                    }
 
                     foreach (SceneEntry entry in hiddenEntries)
                     {
                         DrawSceneRow(entry, SceneSection.Hidden);
+                    }
+                }
+
+                if (!toggleRendered && hiddenEntries.Count > 0)
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        GUILayout.FlexibleSpace();
+                        DrawShowHiddenToggle(hiddenEntries.Count);
                     }
                 }
             }
@@ -178,12 +227,16 @@ namespace WendellLeao.SceneSwitcher.Editor
             {
                 int starredCount = filteredEntries.Count(entry => !SceneHidden.IsHidden(entry.Guid) && SceneStarred.IsStarred(entry.Guid));
                 int otherCount = shownCount - starredCount;
-                bool showStarredHeader = starredCount > 0 || hiddenCount > 0;
+                bool showStarredSection = starredCount > 0;
+                bool showAllSection = otherCount > 0;
                 bool showHiddenSection = _showHidden && hiddenCount > 0;
 
+                int sectionCount = (showStarredSection ? 1 : 0) + (showAllSection ? 1 : 0) + (showHiddenSection ? 1 : 0);
+                bool showFallbackToggleRow = sectionCount == 0 && hiddenCount > 0;
+
                 rowCount = starredCount + otherCount + (showHiddenSection ? hiddenCount : 0);
-                headerCount = (showStarredHeader ? 1 : 0) + 1 + (showHiddenSection ? 1 : 0);
-                sectionSpacing = (showStarredHeader ? SectionSpacing : 0f) + (showHiddenSection ? SectionSpacing : 0f);
+                headerCount = sectionCount + (showFallbackToggleRow ? 1 : 0);
+                sectionSpacing = sectionCount > 0 ? (sectionCount - 1) * SectionSpacing : 0f;
             }
 
             float height = ToolbarHeight
