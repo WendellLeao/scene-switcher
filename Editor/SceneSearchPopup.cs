@@ -19,6 +19,8 @@ namespace WendellLeao.SceneSwitcher.Editor
         private const float SectionSpacing = 6f;
         private const float ElementSpacing = 3f;
         private const float BottomPadding = 28f;
+        private const float DropIndicatorThickness = 2f;
+        private const float DragThreshold = 4f;
 
         private static readonly Color ActiveSceneColor = EditorGUIUtility.isProSkin
             ? new Color(0.24f, 0.38f, 0.63f, 0.55f)
@@ -28,9 +30,25 @@ namespace WendellLeao.SceneSwitcher.Editor
             ? new Color(1f, 1f, 1f, 0.06f)
             : new Color(0f, 0f, 0f, 0.06f);
 
+        private static readonly Color DraggingRowColor = EditorGUIUtility.isProSkin
+            ? new Color(1f, 1f, 1f, 0.10f)
+            : new Color(0f, 0f, 0f, 0.10f);
+
+        private static readonly Color DropIndicatorColor = EditorGUIUtility.isProSkin
+            ? new Color(0.4f, 0.7f, 1f, 1f)
+            : new Color(0.1f, 0.4f, 0.9f, 1f);
+
         private readonly float _width;
         private Vector2 _scrollPosition;
         private string _search = string.Empty;
+
+        private string _mouseDownGuid;
+        private Vector2 _mouseDownPosition;
+
+        private string _draggingGuid;
+        private string _dropTargetGuid;
+        private bool _dropInsertAfter;
+        private bool _dropTargetIsStarredSection;
 
         public SceneSearchPopup(float width)
         {
@@ -76,7 +94,7 @@ namespace WendellLeao.SceneSwitcher.Editor
 
                 foreach (SceneEntry entry in starredEntries)
                 {
-                    DrawSceneRow(entry);
+                    DrawSceneRow(entry, isStarredSection: true);
                 }
 
                 GUILayout.Space(6f);
@@ -86,10 +104,12 @@ namespace WendellLeao.SceneSwitcher.Editor
 
             foreach (SceneEntry entry in otherEntries)
             {
-                DrawSceneRow(entry);
+                DrawSceneRow(entry, isStarredSection: false);
             }
 
             GUILayout.EndScrollView();
+
+            HandleDragRelease();
         }
 
         private float ComputeHeight()
@@ -128,21 +148,27 @@ namespace WendellLeao.SceneSwitcher.Editor
             return Mathf.Max(contentWidth, MinWindowWidth);
         }
 
-        private void DrawSceneRow(SceneEntry entry)
+        private void DrawSceneRow(SceneEntry entry, bool isStarredSection)
         {
             Rect rowRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
 
             Event evt = Event.current;
             bool isActiveScene = SceneManager.GetActiveScene().path == entry.Path;
             bool isHovered = rowRect.Contains(evt.mousePosition);
+            bool isDragging = _draggingGuid != null;
+            bool isBeingDragged = _draggingGuid == entry.Guid;
 
             if (evt.type == EventType.Repaint)
             {
-                if (isActiveScene)
+                if (isBeingDragged)
+                {
+                    EditorGUI.DrawRect(rowRect, DraggingRowColor);
+                }
+                else if (isActiveScene)
                 {
                     EditorGUI.DrawRect(rowRect, ActiveSceneColor);
                 }
-                else if (isHovered)
+                else if (isHovered && !isDragging)
                 {
                     EditorGUI.DrawRect(rowRect, HoverColor);
                 }
@@ -167,11 +193,8 @@ namespace WendellLeao.SceneSwitcher.Editor
             {
                 if (evt.button == 0)
                 {
-                    if (OpenScene(entry, additive: evt.shift))
-                    {
-                        editorWindow.Close();
-                    }
-
+                    _mouseDownGuid = entry.Guid;
+                    _mouseDownPosition = evt.mousePosition;
                     evt.Use();
                 }
                 else if (evt.button == 1)
@@ -180,18 +203,105 @@ namespace WendellLeao.SceneSwitcher.Editor
                     evt.Use();
                 }
             }
+
+            if (!isDragging && _mouseDownGuid == entry.Guid && evt.type == EventType.MouseDrag
+                && (evt.mousePosition - _mouseDownPosition).sqrMagnitude > DragThreshold * DragThreshold)
+            {
+                _draggingGuid = entry.Guid;
+                _dropTargetGuid = null;
+            }
+
+            if (isDragging && !isBeingDragged && (evt.type == EventType.MouseDrag || evt.type == EventType.Repaint) && isHovered)
+            {
+                _dropTargetGuid = entry.Guid;
+                _dropInsertAfter = evt.mousePosition.y > rowRect.center.y;
+                _dropTargetIsStarredSection = isStarredSection;
+            }
+
+            if (evt.type == EventType.Repaint && isDragging && !isBeingDragged && _dropTargetGuid == entry.Guid)
+            {
+                float indicatorY = _dropInsertAfter ? rowRect.yMax - DropIndicatorThickness : rowRect.yMin;
+                Rect indicatorRect = new Rect(rowRect.x, indicatorY, rowRect.width, DropIndicatorThickness);
+
+                EditorGUI.DrawRect(indicatorRect, DropIndicatorColor);
+            }
+        }
+
+        private void HandleDragRelease()
+        {
+            Event evt = Event.current;
+
+            if (evt.type != EventType.MouseUp)
+            {
+                return;
+            }
+
+            if (_draggingGuid != null)
+            {
+                if (_dropTargetGuid != null)
+                {
+                    if (_dropInsertAfter)
+                    {
+                        SceneOrder.MoveAfter(_draggingGuid, _dropTargetGuid);
+                    }
+                    else
+                    {
+                        SceneOrder.MoveBefore(_draggingGuid, _dropTargetGuid);
+                    }
+
+                    if (SceneStarred.IsStarred(_draggingGuid) != _dropTargetIsStarredSection)
+                    {
+                        SceneStarred.Toggle(_draggingGuid);
+                    }
+                }
+
+                _draggingGuid = null;
+                _dropTargetGuid = null;
+                _mouseDownGuid = null;
+                evt.Use();
+
+                return;
+            }
+
+            if (_mouseDownGuid != null)
+            {
+                SceneEntry? entry = FindEntry(_mouseDownGuid);
+                bool additive = evt.shift;
+
+                _mouseDownGuid = null;
+
+                if (entry.HasValue && OpenScene(entry.Value, additive))
+                {
+                    editorWindow.Close();
+                }
+
+                evt.Use();
+            }
+        }
+
+        private static SceneEntry? FindEntry(string guid)
+        {
+            foreach (SceneEntry entry in SceneCatalog.Entries)
+            {
+                if (entry.Guid == guid)
+                {
+                    return entry;
+                }
+            }
+
+            return null;
         }
 
         private List<SceneEntry> FilterEntries(string search)
         {
-            if (string.IsNullOrWhiteSpace(search))
+            IEnumerable<SceneEntry> entries = SceneCatalog.Entries;
+
+            if (!string.IsNullOrWhiteSpace(search))
             {
-                return SceneCatalog.Entries.ToList();
+                entries = entries.Where(entry => entry.Name.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0);
             }
 
-            return SceneCatalog.Entries
-                .Where(entry => entry.Name.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0)
-                .ToList();
+            return SceneOrder.Sort(entries);
         }
 
         private static bool OpenScene(SceneEntry entry, bool additive)
