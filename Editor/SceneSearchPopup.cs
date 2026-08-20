@@ -26,7 +26,7 @@ namespace WendellLeao.SceneSwitcher.Editor
         private const float ToolbarHeight = 20f;
         private const float SectionSpacing = 6f;
         private const float ElementSpacing = 3f;
-        private const float BottomPadding = 28f;
+        private const float BottomPadding = 6f;
         private const float DropIndicatorThickness = 2f;
         private const float DragThreshold = 4f;
 
