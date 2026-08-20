@@ -83,28 +83,40 @@ namespace WendellLeao.SceneSwitcher.Editor
             }
 
             List<SceneEntry> filteredEntries = FilterEntries(_search);
-            List<SceneEntry> starredEntries = filteredEntries.Where(entry => SceneStarred.IsStarred(entry.Guid)).ToList();
-            List<SceneEntry> otherEntries = filteredEntries.Where(entry => !SceneStarred.IsStarred(entry.Guid)).ToList();
+            bool isSearching = !string.IsNullOrWhiteSpace(_search);
 
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition, GUILayout.ExpandHeight(true));
 
-            if (starredEntries.Count > 0)
+            if (isSearching)
             {
-                GUILayout.Label("Starred", EditorStyles.miniBoldLabel);
-
-                foreach (SceneEntry entry in starredEntries)
+                foreach (SceneEntry entry in filteredEntries)
                 {
-                    DrawSceneRow(entry, isStarredSection: true);
+                    DrawSceneRow(entry, isStarredSection: SceneStarred.IsStarred(entry.Guid));
+                }
+            }
+            else
+            {
+                List<SceneEntry> starredEntries = filteredEntries.Where(entry => SceneStarred.IsStarred(entry.Guid)).ToList();
+                List<SceneEntry> otherEntries = filteredEntries.Where(entry => !SceneStarred.IsStarred(entry.Guid)).ToList();
+
+                if (starredEntries.Count > 0)
+                {
+                    GUILayout.Label("Starred", EditorStyles.miniBoldLabel);
+
+                    foreach (SceneEntry entry in starredEntries)
+                    {
+                        DrawSceneRow(entry, isStarredSection: true);
+                    }
+
+                    GUILayout.Space(6f);
                 }
 
-                GUILayout.Space(6f);
-            }
+                GUILayout.Label("All Scenes", EditorStyles.miniBoldLabel);
 
-            GUILayout.Label("All Scenes", EditorStyles.miniBoldLabel);
-
-            foreach (SceneEntry entry in otherEntries)
-            {
-                DrawSceneRow(entry, isStarredSection: false);
+                foreach (SceneEntry entry in otherEntries)
+                {
+                    DrawSceneRow(entry, isStarredSection: false);
+                }
             }
 
             GUILayout.EndScrollView();
@@ -115,17 +127,19 @@ namespace WendellLeao.SceneSwitcher.Editor
         private float ComputeHeight()
         {
             List<SceneEntry> filteredEntries = FilterEntries(_search);
+            bool isSearching = !string.IsNullOrWhiteSpace(_search);
             int starredCount = filteredEntries.Count(entry => SceneStarred.IsStarred(entry.Guid));
             int otherCount = filteredEntries.Count - starredCount;
 
             float lineHeight = EditorGUIUtility.singleLineHeight;
             int rowCount = starredCount + otherCount;
-            int headerCount = starredCount > 0 ? 2 : 1;
+            int headerCount = isSearching ? 0 : (starredCount > 0 ? 2 : 1);
+            float sectionSpacing = isSearching ? 0f : (starredCount > 0 ? SectionSpacing : 0f);
 
             float height = ToolbarHeight
                            + headerCount * lineHeight
                            + rowCount * lineHeight
-                           + (starredCount > 0 ? SectionSpacing : 0f)
+                           + sectionSpacing
                            + (rowCount + headerCount) * ElementSpacing
                            + BottomPadding;
 
