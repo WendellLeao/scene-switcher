@@ -10,8 +10,16 @@ namespace WendellLeao.SceneSwitcher.Editor
 {
     internal sealed class SceneSearchPopup : PopupWindowContent
     {
+        private enum SceneSection
+        {
+            Starred,
+            All,
+            Hidden
+        }
+
         private const float MinWindowWidth = 260f;
         private const float StarWidth = 16f;
+        private const float HideWidth = 16f;
         private const float NameWidthPadding = 40f;
         private const float MinWindowHeight = 90f;
         private const float MaxWindowHeight = 320f;
@@ -41,6 +49,7 @@ namespace WendellLeao.SceneSwitcher.Editor
         private readonly float _width;
         private Vector2 _scrollPosition;
         private string _search = string.Empty;
+        private bool _showHidden;
 
         private string _mouseDownGuid;
         private Vector2 _mouseDownPosition;
@@ -48,7 +57,7 @@ namespace WendellLeao.SceneSwitcher.Editor
         private string _draggingGuid;
         private string _dropTargetGuid;
         private bool _dropInsertAfter;
-        private bool _dropTargetIsStarredSection;
+        private SceneSection _dropTargetSection;
 
         public SceneSearchPopup(float width)
         {
@@ -85,37 +94,60 @@ namespace WendellLeao.SceneSwitcher.Editor
             List<SceneEntry> filteredEntries = FilterEntries(_search);
             bool isSearching = !string.IsNullOrWhiteSpace(_search);
 
+            List<SceneEntry> hiddenEntries = filteredEntries.Where(entry => SceneHidden.IsHidden(entry.Guid)).ToList();
+            List<SceneEntry> shownEntries = filteredEntries.Where(entry => !SceneHidden.IsHidden(entry.Guid)).ToList();
+
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition, GUILayout.ExpandHeight(true));
 
             if (isSearching)
             {
-                foreach (SceneEntry entry in filteredEntries)
+                List<SceneEntry> searchEntries = _showHidden ? filteredEntries : shownEntries;
+
+                foreach (SceneEntry entry in searchEntries)
                 {
-                    DrawSceneRow(entry, isStarredSection: SceneStarred.IsStarred(entry.Guid));
+                    DrawSceneRow(entry, ResolveSection(entry));
                 }
             }
             else
             {
-                List<SceneEntry> starredEntries = filteredEntries.Where(entry => SceneStarred.IsStarred(entry.Guid)).ToList();
-                List<SceneEntry> otherEntries = filteredEntries.Where(entry => !SceneStarred.IsStarred(entry.Guid)).ToList();
+                List<SceneEntry> starredEntries = shownEntries.Where(entry => SceneStarred.IsStarred(entry.Guid)).ToList();
+                List<SceneEntry> otherEntries = shownEntries.Where(entry => !SceneStarred.IsStarred(entry.Guid)).ToList();
 
-                if (starredEntries.Count > 0)
+                bool showStarredHeader = starredEntries.Count > 0 || hiddenEntries.Count > 0;
+
+                if (showStarredHeader)
                 {
-                    GUILayout.Label("Starred", EditorStyles.miniBoldLabel);
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        GUILayout.Label("Starred", EditorStyles.miniBoldLabel);
+                        GUILayout.FlexibleSpace();
+                        DrawShowHiddenToggle(hiddenEntries.Count);
+                    }
 
                     foreach (SceneEntry entry in starredEntries)
                     {
-                        DrawSceneRow(entry, isStarredSection: true);
+                        DrawSceneRow(entry, SceneSection.Starred);
                     }
 
-                    GUILayout.Space(6f);
+                    GUILayout.Space(SectionSpacing);
                 }
 
                 GUILayout.Label("All Scenes", EditorStyles.miniBoldLabel);
 
                 foreach (SceneEntry entry in otherEntries)
                 {
-                    DrawSceneRow(entry, isStarredSection: false);
+                    DrawSceneRow(entry, SceneSection.All);
+                }
+
+                if (_showHidden && hiddenEntries.Count > 0)
+                {
+                    GUILayout.Space(SectionSpacing);
+                    GUILayout.Label("Hidden", EditorStyles.miniBoldLabel);
+
+                    foreach (SceneEntry entry in hiddenEntries)
+                    {
+                        DrawSceneRow(entry, SceneSection.Hidden);
+                    }
                 }
             }
 
@@ -128,13 +160,31 @@ namespace WendellLeao.SceneSwitcher.Editor
         {
             List<SceneEntry> filteredEntries = FilterEntries(_search);
             bool isSearching = !string.IsNullOrWhiteSpace(_search);
-            int starredCount = filteredEntries.Count(entry => SceneStarred.IsStarred(entry.Guid));
-            int otherCount = filteredEntries.Count - starredCount;
+            int hiddenCount = filteredEntries.Count(entry => SceneHidden.IsHidden(entry.Guid));
+            int shownCount = filteredEntries.Count - hiddenCount;
 
             float lineHeight = EditorGUIUtility.singleLineHeight;
-            int rowCount = starredCount + otherCount;
-            int headerCount = isSearching ? 0 : (starredCount > 0 ? 2 : 1);
-            float sectionSpacing = isSearching ? 0f : (starredCount > 0 ? SectionSpacing : 0f);
+            int rowCount;
+            int headerCount;
+            float sectionSpacing;
+
+            if (isSearching)
+            {
+                rowCount = _showHidden ? filteredEntries.Count : shownCount;
+                headerCount = 0;
+                sectionSpacing = 0f;
+            }
+            else
+            {
+                int starredCount = filteredEntries.Count(entry => !SceneHidden.IsHidden(entry.Guid) && SceneStarred.IsStarred(entry.Guid));
+                int otherCount = shownCount - starredCount;
+                bool showStarredHeader = starredCount > 0 || hiddenCount > 0;
+                bool showHiddenSection = _showHidden && hiddenCount > 0;
+
+                rowCount = starredCount + otherCount + (showHiddenSection ? hiddenCount : 0);
+                headerCount = (showStarredHeader ? 1 : 0) + 1 + (showHiddenSection ? 1 : 0);
+                sectionSpacing = (showStarredHeader ? SectionSpacing : 0f) + (showHiddenSection ? SectionSpacing : 0f);
+            }
 
             float height = ToolbarHeight
                            + headerCount * lineHeight
@@ -157,12 +207,38 @@ namespace WendellLeao.SceneSwitcher.Editor
                 maxNameWidth = Mathf.Max(maxNameWidth, nameWidth);
             }
 
-            float contentWidth = StarWidth + maxNameWidth + NameWidthPadding;
+            float contentWidth = StarWidth + HideWidth + maxNameWidth + NameWidthPadding;
 
             return Mathf.Max(contentWidth, MinWindowWidth);
         }
 
-        private void DrawSceneRow(SceneEntry entry, bool isStarredSection)
+        private void DrawShowHiddenToggle(int hiddenCount)
+        {
+            if (hiddenCount == 0)
+            {
+                return;
+            }
+
+            GUIContent toggleContent = new GUIContent(_showHidden ? "👁" : "🙈",
+                _showHidden ? "Hide the hidden scenes" : "Show hidden scenes");
+
+            if (GUILayout.Button(toggleContent, EditorStyles.label, GUILayout.Width(StarWidth)))
+            {
+                _showHidden = !_showHidden;
+            }
+        }
+
+        private static SceneSection ResolveSection(SceneEntry entry)
+        {
+            if (SceneHidden.IsHidden(entry.Guid))
+            {
+                return SceneSection.Hidden;
+            }
+
+            return SceneStarred.IsStarred(entry.Guid) ? SceneSection.Starred : SceneSection.All;
+        }
+
+        private void DrawSceneRow(SceneEntry entry, SceneSection section)
         {
             Rect rowRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
 
@@ -189,11 +265,20 @@ namespace WendellLeao.SceneSwitcher.Editor
             }
 
             Rect starRect = new Rect(rowRect.xMax - StarWidth, rowRect.y, StarWidth, rowRect.height);
-            Rect nameRect = new Rect(rowRect.x, rowRect.y, rowRect.width - StarWidth, rowRect.height);
+            Rect hideRect = new Rect(starRect.x - HideWidth, rowRect.y, HideWidth, rowRect.height);
+            Rect nameRect = new Rect(rowRect.x, rowRect.y, rowRect.width - StarWidth - HideWidth, rowRect.height);
 
             GUIStyle nameStyle = isActiveScene ? EditorStyles.boldLabel : EditorStyles.label;
 
             GUI.Label(nameRect, new GUIContent(entry.Name, entry.Path), nameStyle);
+
+            bool isHidden = SceneHidden.IsHidden(entry.Guid);
+            GUIContent hideContent = new GUIContent(isHidden ? "🙈" : "👁", isHidden ? "Show scene" : "Hide from Scene Search");
+
+            if (GUI.Button(hideRect, hideContent, EditorStyles.label))
+            {
+                SceneHidden.Toggle(entry.Guid);
+            }
 
             bool isStarred = SceneStarred.IsStarred(entry.Guid);
             GUIContent starContent = new GUIContent(isStarred ? "★" : "☆", isStarred ? "Remove from Starred" : "Add to Starred");
@@ -229,7 +314,7 @@ namespace WendellLeao.SceneSwitcher.Editor
             {
                 _dropTargetGuid = entry.Guid;
                 _dropInsertAfter = evt.mousePosition.y > rowRect.center.y;
-                _dropTargetIsStarredSection = isStarredSection;
+                _dropTargetSection = section;
             }
 
             if (evt.type == EventType.Repaint && isDragging && !isBeingDragged && _dropTargetGuid == entry.Guid)
@@ -263,9 +348,21 @@ namespace WendellLeao.SceneSwitcher.Editor
                         SceneOrder.MoveBefore(_draggingGuid, _dropTargetGuid);
                     }
 
-                    if (SceneStarred.IsStarred(_draggingGuid) != _dropTargetIsStarredSection)
+                    bool shouldBeHidden = _dropTargetSection == SceneSection.Hidden;
+
+                    if (SceneHidden.IsHidden(_draggingGuid) != shouldBeHidden)
                     {
-                        SceneStarred.Toggle(_draggingGuid);
+                        SceneHidden.Toggle(_draggingGuid);
+                    }
+
+                    if (_dropTargetSection != SceneSection.Hidden)
+                    {
+                        bool shouldBeStarred = _dropTargetSection == SceneSection.Starred;
+
+                        if (SceneStarred.IsStarred(_draggingGuid) != shouldBeStarred)
+                        {
+                            SceneStarred.Toggle(_draggingGuid);
+                        }
                     }
                 }
 
