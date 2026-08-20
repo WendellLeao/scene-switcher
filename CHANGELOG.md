@@ -2,6 +2,20 @@
 
 All notable changes to this package are documented in this file.
 
+## [1.1.0] - 2026-08-19
+
+### Added
+- Drag-and-drop reordering of scenes within the search popup.
+- A hide button and Hidden section, letting scenes be excluded from the default list and toggled back into view.
+
+### Changed
+- Section headers are now hidden while searching, so filtered results read as a flat list.
+- The visibility toggle now uses eye icons instead of text.
+
+### Fixed
+- Empty sections and toggle placement in the search popup no longer leave stray headers or misplaced controls.
+- Reduced excessive bottom padding that left a dead blank strip under the scene list.
+
 ## [1.0.0] - 2026-08-19
 
 ### Added
