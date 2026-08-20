@@ -219,10 +219,10 @@ namespace WendellLeao.SceneSwitcher.Editor
                 return;
             }
 
-            GUIContent toggleContent = new GUIContent(_showHidden ? "👁" : "🙈",
+            GUIContent toggleContent = new GUIContent(_showHidden ? SceneSwitcherIcons.VisibilityOn : SceneSwitcherIcons.VisibilityOff,
                 _showHidden ? "Hide the hidden scenes" : "Show hidden scenes");
 
-            if (GUILayout.Button(toggleContent, EditorStyles.label, GUILayout.Width(StarWidth)))
+            if (GUILayout.Button(toggleContent, EditorStyles.label, GUILayout.Width(StarWidth), GUILayout.Height(EditorGUIUtility.singleLineHeight)))
             {
                 _showHidden = !_showHidden;
             }
@@ -273,7 +273,7 @@ namespace WendellLeao.SceneSwitcher.Editor
             GUI.Label(nameRect, new GUIContent(entry.Name, entry.Path), nameStyle);
 
             bool isHidden = SceneHidden.IsHidden(entry.Guid);
-            GUIContent hideContent = new GUIContent(isHidden ? "🙈" : "👁", isHidden ? "Show scene" : "Hide from Scene Search");
+            GUIContent hideContent = new GUIContent(isHidden ? SceneSwitcherIcons.VisibilityOff : SceneSwitcherIcons.VisibilityOn, isHidden ? "Show scene" : "Hide from Scene Search");
 
             if (GUI.Button(hideRect, hideContent, EditorStyles.label))
             {
